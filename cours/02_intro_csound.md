@@ -1,5 +1,7 @@
 # Csound 
 
+[Documentation](https://csound.com/manual/)
+
 ## Introduction 
 
 A l'origine, et toujours aujourd'hui, Csound distingue par essence deux *blocs* de code : 
@@ -94,7 +96,7 @@ i 2 0 -1  // On créé une note infinie pour l'instrument de contrôle
 
 ## Platforme de live-coding Csound en ligne 
 
-[Ici](https://ide.csound.com/editor/HMZBmgs0OvuQOZg6kh0e)
+[Plateforme en ligne](https://ide.csound.com/editor/HMZBmgs0OvuQOZg6kh0e)
 
 Dans cette plateforme, vous pouvez déjà vous approprier quelques éléments  de Csound. 
 Le fichier Documentation.orc vous explique les éléments de syntaxe, et les différents sons / outils de contrôle que je fournis. Dans un second temps, on ira plus loin.

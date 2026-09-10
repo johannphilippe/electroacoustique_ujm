@@ -8,12 +8,15 @@ Il y a, dans l'histoire, en fait très peu de machines de ce genre dont le fonct
 
 L'une des premières machines à intégrer ce concept de programmation : le métier jacquard (1801), programmable avec des cartes perforées.  
 ![Métier Jacquard](https://upload.wikimedia.org/wikipedia/commons/e/ef/Metier_jacquard.jpg?utm_source=fr.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled)
-Grâces aux cartes perforées, on décrit à la machine le motif à réaliser. 
 
+
+Grâces aux cartes perforées, on décrit à la machine le motif à réaliser. 
 C'est la première machine d'une petite liste de machines programmables, parmi lesquelles la machine analytique de Charles Babbage, et la machine de Turing. 
 Les recherches d'Ada Lovelace au milieu du 19è siècle permettent d'imaginer une magine qui agirait de manière abstraite sur différents médiums (image, texte, son...), tant que ces derniers sont représentés dans le format de la machine. C'est poussée par cette idée que naît la toute théorique machine analytique de Charles Babbage. Basée sur des cartes à trous (programmes), la machine pose les fondements de l'ordinateur : mémoire, des périphériques (entrée, sortie), une "processeur" (unité de calcul) etc. 
 
 ![Machine analytique de Charles Babbage](https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a4/Analytical_Engine_%282290032530%29.jpg/960px-Analytical_Engine_%282290032530%29.jpg?utm_source=fr.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail)
+
+
 
 Ada Lovelace écrit à ce sujet que cette machine a vocation à "nous aider à effectuer ce que nous savons déjà dominer". Elle rejoint Marshall McLuhan qui écrira plus tard (pour comprendre les médias) que l'évolution des médias ne modifie en rien la nature de l'activité humaine, mais uniquement sa vitesse et la taille du flux. 
 
@@ -23,6 +26,8 @@ L'autre caractéristique centrale de l'ordinateur, c'est de travailler sur de l'
 
 Un siècle plus tard, dans les années 1950, l'électronique se répand, et Alan Turing a conceptualisé la "machine de Turing" en 1936 : un modèle intellectuel pour conceptualiser les appareils de calculs. 
 Après quelques tentatives plus ou moins fructueuses dans les années 1940, les années 1950 voient les premiers ordinateurs se développer dans les laboratoires de recherche.
+
+![4x IRCAM](https://drop.philharmoniedeparis.fr/CMFM/CMFM000008800/158770_CMIM000022682_LD.jpg)
 
 Entre-temps, en 1928 est paru le théorème fondamental qui rendra possible de *faire du son avec un ordinateur* (entre autres choses) : le théorème de l'échantillonnage de Shannon & Nyquist. 
 "La représentation discrète d'un signal exige des échantillons régulièrement espacés à une fréquence d'échantillonnage supérieure au double de la fréquence maximale présente dans ce signal."
