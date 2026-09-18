@@ -16,8 +16,6 @@ Les recherches d'Ada Lovelace au milieu du 19è siècle permettent d'imaginer un
 
 ![Machine analytique de Charles Babbage](https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a4/Analytical_Engine_%282290032530%29.jpg/960px-Analytical_Engine_%282290032530%29.jpg?utm_source=fr.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail)
 
-
-
 Ada Lovelace écrit à ce sujet que cette machine a vocation à "nous aider à effectuer ce que nous savons déjà dominer". Elle rejoint Marshall McLuhan qui écrira plus tard (pour comprendre les médias) que l'évolution des médias ne modifie en rien la nature de l'activité humaine, mais uniquement sa vitesse et la taille du flux. 
 
 L'autre caractéristique centrale de l'ordinateur, c'est de travailler sur de l'information discrète : une série de points plutôt qu'un événement continue, contrairement à un phénomène physique, électronique etc. 
