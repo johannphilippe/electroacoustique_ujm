@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>04b_csound</title>
+	<style>
+		/* Basic styles for readability */
+		body {
+			font-family: sans-serif;
+			max-width: 800px;
+			margin: 2em auto;
+			padding: 0 1em;
+			line-height: 1.6;
+		}
+		img { max-width: 100%; height: auto; }
+		pre { background-color: #f4f4f4; padding: 1em; overflow-x: auto; }
+		code { font-family: monospace; }
+	</style>
+</head>
+<body>
+	<h1>Csound (bis) - Consolider les bases et aller plus loin</h1>
+<p><a href="https://csound.com/manual/">Documentation</a></p>
+<h2>Introduction</h2>
+<p>Ce chapitre est un complément aux chapitres 2 et 3. Il a deux objectifs :</p>
+<ol>
+<li><strong>Revenir sur les fondamentaux</strong> qui posent souvent problème : les p-fields, les trois vitesses (i, k, a), la lecture des messages d’erreur. Si ces notions sont claires, tout le reste devient beaucoup plus simple.</li>
+<li><strong>Aller plus loin</strong> avec des outils qui ouvrent de nouvelles possibilités musicales :
+<ul>
+<li>faire communiquer les instruments (et ajouter une réverbération),</li>
+<li>travailler avec des sons enregistrés,</li>
+<li>moduler le son pour le rendre vivant,</li>
+<li>fabriquer ses propres opcodes,</li>
+<li>composer “à l’avance” avec des boucles et des instruments qui se relancent eux-mêmes.</li>
+</ul>
+</li>
+</ol>
+<p>À la fin du chapitre, on enrichira l’installation générative du chapitre 3 avec tous ces éléments.</p>
+<h2>1. Retour sur les fondamentaux</h2>
+<h3>1.1 Les p-fields : la carte d’identité d’une note</h3>
+<p>Chaque note envoyée à un instrument (dans le score, avec <code>schedule</code> ou avec <code>schedulek</code>) est une liste de valeurs : les <strong>p-fields</strong> (<em>parameter fields</em>). Les trois premiers ont toujours le même sens :</p>
+<table>
+<thead>
+<tr>
+<th>p-field</th>
+<th>Sens</th>
+<th>Exemple</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>p1</code></td>
+<td>quel instrument</td>
+<td><code>1</code> ou <code>&quot;MonInstrument&quot;</code></td>
+</tr>
+<tr>
+<td><code>p2</code></td>
+<td>quand (début, en secondes)</td>
+<td><code>0.5</code></td>
+</tr>
+<tr>
+<td><code>p3</code></td>
+<td>combien de temps (durée, en secondes)</td>
+<td><code>2</code></td>
+</tr>
+<tr>
+<td><code>p4</code>, <code>p5</code>…</td>
+<td><strong>ce que vous voulez</strong> : c’est vous qui décidez</td>
+<td>fréquence, amplitude…</td>
+</tr>
+</tbody>
+</table>
+<p>Dans le score :</p>
+<pre><code class="language-c">;  p1  p2   p3   p4    p5
+i  1   0    2    440   0.3
+</code></pre>
+<p>Et exactement la même note, depuis le code :</p>
+<pre><code class="language-c">schedule 1, 0, 2, 440, 0.3
+</code></pre>
+<p>Dans l’instrument, on récupère ces valeurs avec <code>p4</code>, <code>p5</code>… Une bonne habitude : les ranger tout de suite dans des variables avec un nom parlant, en haut de l’instrument.</p>
+<pre><code class="language-c">instr 1
+    ifreq = p4   // p4 = fréquence
+    iamp  = p5   // p5 = amplitude
+    ...
+endin
+</code></pre>
+<p>À retenir : <strong>à partir de p4, les p-fields n’ont pas de sens imposé</strong>. Leur signification, c’est vous qui la définissez dans l’instrument, et il faut respecter le même ordre au moment de déclencher les notes.</p>
+<h3>1.2 Les trois vitesses, concrètement</h3>
+<p>On a vu les préfixes <strong>i</strong>, <strong>k</strong> et <strong>a</strong>. Voici ce qui se passe vraiment quand une note est jouée :</p>
+<ol>
+<li><strong>Au début de la note</strong>, Csound exécute une fois toutes les lignes de l’instrument qui concernent des variables <strong>i</strong> : c’est l’<em>initialisation</em>.</li>
+<li><strong>Ensuite, en boucle, jusqu’à la fin de la note</strong>, Csound exécute toutes les lignes <strong>k</strong> et <strong>a</strong>, par petits paquets.</li>
+</ol>
+<p>La taille de ces paquets, c’est <code>ksmps</code>. Avec <code>sr = 44100</code> et <code>ksmps = 32</code> :</p>
+<ul>
+<li>à chaque tour de boucle, Csound calcule <strong>32 échantillons</strong> audio d’un coup (les variables <strong>a</strong> sont donc des paquets de 32 valeurs) ;</li>
+<li>et chaque variable <strong>k</strong> est calculée <strong>une seule fois</strong> par paquet, soit <code>44100 / 32 ≈ 1378</code> fois par seconde.</li>
+</ul>
+<p>On peut le vérifier avec ce petit instrument, qui compte les tours de boucle :</p>
+<pre><code class="language-c">instr Compteur
+    kcompte init 0
+    kcompte = kcompte + 1
+    printk 1, kcompte   // affiche kcompte toutes les secondes
+endin
+</code></pre>
+<p>La console affiche 1 (le tout premier tour), puis environ 1378, 2756, 4134… : la ligne <code>kcompte = kcompte + 1</code> est exécutée environ 1378 fois par seconde.</p>
+<p>Et pour voir la différence entre <strong>i</strong> et <strong>k</strong> :</p>
+<pre><code class="language-c">instr Difference
+    ival = random:i(0, 1)   // tiré UNE fois, au début de la note
+    kval = random:k(0, 1)   // tiré à CHAQUE tour de boucle
+    print ival
+    printk 0.5, kval        // affiche kval toutes les 0.5 secondes
+endin
+</code></pre>
+<p><code>ival</code> est affiché une seule fois et ne change jamais ; <code>kval</code> change à chaque affichage.</p>
+<p><strong>Les suffixes <code>:i</code> et <code>:k</code></strong> : quand on écrit une fonction dans un calcul (la <em>syntaxe fonctionnelle</em>, comme <code>random:k(0, 1)</code>), le suffixe indique à Csound à quelle vitesse la calculer. <code>random:i</code> tire une valeur au début de la note, <code>random:k</code> en tire une nouvelle à chaque tour de boucle. Sans suffixe, Csound essaie de deviner, et se trompe parfois : mieux vaut toujours l’écrire.</p>
+<p><strong>Récapitulatif :</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>Calculée</th>
+<th>Exemple d’usage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>i</strong></td>
+<td>une fois, au début de la note</td>
+<td>hauteur, durée, amplitude de la note, tirages “une fois pour toutes”</td>
+</tr>
+<tr>
+<td><strong>k</strong></td>
+<td>~1378 fois par seconde (avec ksmps = 32)</td>
+<td>enveloppes, LFO, décisions, compteurs, temps écoulé</td>
+</tr>
+<tr>
+<td><strong>a</strong></td>
+<td>44100 fois par seconde (par paquets de ksmps)</td>
+<td>le signal audio</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Conséquence importante sur les conditions</strong> : un <code>if</code> qui compare des variables <strong>i</strong> n’est évalué qu’une fois, au début de la note. Un <code>if</code> qui compare des variables <strong>k</strong> est évalué à chaque tour de boucle. C’est pour cela que l’instrument de contrôle du chapitre 3 utilise <code>ktime</code> (et pas <code>itime</code>) : il faut regarder l’heure en permanence.</p>
+<p><strong>Et les variables globales</strong> : un <code>g</code> devant le préfixe (<code>gi</code>, <code>gk</code>, <code>ga</code>) rend la variable visible par <strong>tous</strong> les instruments. Sans <code>g</code>, une variable n’existe qu’à l’intérieur de son instrument (et même : à l’intérieur de chaque note).</p>
+<h3>1.3 Lire les messages d’erreur</h3>
+<p>Quand Csound refuse de démarrer, il écrit un message dans la console. Il faut apprendre à le lire : il donne presque toujours la solution. Voici les trois erreurs les plus fréquentes.</p>
+<p><strong>Erreur 1 : variable sans préfixe</strong></p>
+<pre><code class="language-c">freq = 440                  // FAUX : pas de préfixe i, k ou a
+ifreq = 440                 // JUSTE
+</code></pre>
+<p>Message : <code>Unable to find opcode entry for '=' with matching argument types</code></p>
+<p><strong>Erreur 2 : variable utilisée avant d’être définie</strong> (souvent une faute de frappe)</p>
+<pre><code class="language-c">aout poscil 0.2, kfreq      // kfreq n'a jamais été créée plus haut
+</code></pre>
+<p>Message : <code>Variable 'kfreq' used before defined</code></p>
+<p><strong>Erreur 3 : mauvaise vitesse pour un argument</strong></p>
+<p>Certains opcodes exigent des valeurs <strong>i</strong> pour certains arguments (dans la documentation, les arguments commencent alors par <code>i</code>). Par exemple, <code>madsr</code> a besoin de valeurs i, car il calcule la forme de l’enveloppe une fois pour toutes au début de la note :</p>
+<pre><code class="language-c">katt = 0.01
+kenv madsr katt, 0.1, 0.5, 0.2    // FAUX : katt est une variable k
+</code></pre>
+<p>Message : <code>Unable to find opcode entry for 'madsr' with matching argument types</code></p>
+<p>Dans les deux cas “<code>Unable to find opcode entry</code>”, le réflexe est le même : aller voir la page de l’opcode dans la documentation, et vérifier le préfixe attendu pour chaque argument. Règle générale : on peut donner une valeur <strong>i</strong> là où une valeur <strong>k</strong> est attendue, mais pas l’inverse.</p>
+<p><strong>Pas une erreur, mais un avertissement à surveiller :</strong></p>
+<pre><code>number of samples out of range:     3456     3456
+</code></pre>
+<p>Cela veut dire que le son <strong>sature</strong> : des échantillons dépassent <code>0dbfs</code> (1). Baissez les amplitudes. C’est particulièrement fréquent quand plusieurs notes se superposent : les amplitudes s’additionnent.</p>
+<h3>1.4 Penser en notes et en décibels</h3>
+<p>Deux conversions à connaître pour penser musicalement plutôt qu’en valeurs brutes :</p>
+<pre><code class="language-c">icps = cpsmidinn(69)      // note MIDI -&gt; fréquence : 69 = la 440 Hz, 60 = do central
+iamp = ampdbfs(-12)       // décibels -&gt; amplitude : -12 dB ≈ 0.25 ; 0 dB = 1 (le maximum)
+</code></pre>
+<p>Le décibel est plus proche de notre perception : chaque fois qu’on retire 6 dB, l’amplitude est divisée par 2. Pour une installation où plusieurs sons se superposent, des amplitudes entre <code>-24</code> et <code>-12</code> dB sont un bon point de départ.</p>
+<h2>2. Faire communiquer les instruments : le bus de réverbération</h2>
+<p>Jusqu’ici, chaque instrument envoyait son son directement vers la sortie avec <code>outs</code>. Mais comment ajouter une réverbération commune à toutes les notes ?</p>
+<p>Mauvaise idée : mettre une réverbération <em>dans</em> l’instrument. Chaque note aurait alors sa propre réverbération, qui s’arrête brutalement avec la note (la réverbération a besoin de continuer après la fin du son), et le calcul serait multiplié par le nombre de notes.</p>
+<p>Bonne idée : faire comme sur une table de mixage, avec un <strong>bus d’effet</strong> (un <em>send</em>). Chaque note envoie une partie de son signal dans une variable audio <strong>globale</strong>, et un instrument unique, qui tourne en permanence, applique la réverbération à tout ce qu’il reçoit.</p>
+<pre><code class="language-c">gaRevL init 0   // le &quot;tuyau&quot; gauche du bus de réverbération
+gaRevR init 0   // le &quot;tuyau&quot; droit
+
+instr Voix
+    ifreq = p4
+    iamp  = p5
+    aenv  madsr 0.01, 0.2, 0.5, 0.5
+    asig  vco2 iamp, ifreq, 0
+    asig  moogladder asig, ifreq * 3, 0.2
+    asig  = asig * aenv
+
+    outs asig, asig                  // le son &quot;sec&quot;, directement en sortie
+    gaRevL = gaRevL + asig * 0.3     // on envoie 30% du signal dans le bus
+    gaRevR = gaRevR + asig * 0.3
+endin
+
+instr Reverb   // défini EN DERNIER : voir plus bas
+    aL, aR reverbsc gaRevL, gaRevR, 0.85, 12000
+    outs aL, aR
+    clear gaRevL, gaRevR             // on vide le bus pour le tour suivant
+endin
+
+schedule &quot;Reverb&quot;, 0, -1             // la réverbération tourne en permanence
+</code></pre>
+<h3>Pas à pas</h3>
+<ul>
+<li><strong><code>gaRevL = gaRevL + ...</code></strong> : on <em>ajoute</em> le signal au bus (et on ne le remplace pas). Ainsi, si 10 notes jouent en même temps, les 10 signaux s’additionnent dans le bus.</li>
+<li><strong><code>reverbsc</code></strong> : une réverbération stéréo de bonne qualité. <code>0.85</code> est la taille de la pièce (entre 0 et 1 : plus c’est haut, plus la réverbération est longue), <code>12000</code> la fréquence de coupure en Hz (plus c’est bas, plus la réverbération est sombre).</li>
+<li><strong><code>clear</code></strong> : une fois la réverbération calculée, on remet le bus à zéro. Sans cette ligne, le signal s’accumulerait indéfiniment et saturerait en quelques secondes.</li>
+<li><strong><code>schedule &quot;Reverb&quot;, 0, -1</code></strong> : une durée négative signifie “infinie”. Cette ligne, écrite en dehors de tout instrument, est exécutée au démarrage.</li>
+</ul>
+<p><strong>L’ordre des instruments est important.</strong> À chaque tour de boucle, Csound calcule les instruments <strong>dans l’ordre de leur numéro</strong>. Il faut donc que toutes les voix aient <em>rempli</em> le bus avant que la réverbération ne le <em>lise</em> et le <em>vide</em>. Les instruments nommés reçoivent un numéro dans l’ordre où ils apparaissent dans le code : il suffit donc d’écrire l’instrument <code>Reverb</code> <strong>en dernier</strong>. (Avec des instruments numérotés, on lui donne un grand numéro, comme <code>instr 99</code>.)</p>
+<p>Ce principe du bus est général : on peut créer de la même façon un bus de délai (<code>vdelay</code>, <code>delayr</code>/<code>delayw</code>), un bus de filtre commun, etc.</p>
+<h2>3. Travailler avec des sons enregistrés</h2>
+<p>Csound ne sert pas qu’à la synthèse : il peut aussi lire, transformer et découper des fichiers audio, comme on l’a fait dans Reaper au chapitre précédent.</p>
+<p>L’opcode <code>diskin2</code> lit un fichier son :</p>
+<pre><code class="language-c">instr Lecteur
+    Sfichier = &quot;voix.wav&quot;          // S = variable de texte (String)
+    ivitesse = p4                  // 1 = normal, 2 = une octave plus haut, 0.5 = une octave plus bas
+    iamp     = p5
+
+    // Un point de départ au hasard dans le fichier
+    idebut = random:i(0, filelen(Sfichier))
+
+    asig diskin2 Sfichier, ivitesse, idebut, 1   // le dernier 1 = lire en boucle
+    aenv linen iamp, 0.05, p3, 0.2
+    asig = asig * aenv
+    outs asig, asig
+endin
+</code></pre>
+<ul>
+<li><strong>Les variables <code>S</code></strong> contiennent du texte (ici, un nom de fichier). C’est un quatrième type de variable, à côté de i, k et a.</li>
+<li><strong><code>filelen</code></strong> donne la durée du fichier en secondes.</li>
+<li><strong><code>diskin2</code></strong> : fichier, vitesse de lecture (qui change aussi la hauteur, comme le mode “bande” du chapitre Reaper), point de départ en secondes, et lecture en boucle (<code>1</code>) ou non (<code>0</code>).</li>
+<li><strong>Mono ou stéréo</strong> : <code>diskin2</code> renvoie autant de signaux que le fichier a de canaux. Pour un fichier stéréo, il faut écrire <code>aL, aR diskin2 ...</code>. Sinon, Csound affiche une erreur.</li>
+<li>Le fichier doit se trouver dans le même dossier que le fichier <code>.csd</code> (ou être importé dans le projet sur la plateforme en ligne).</li>
+</ul>
+<p><strong>Pour transposer en demi-tons</strong> plutôt qu’en vitesse : <code>ivitesse = 2 ^ (idemitons / 12)</code>, la même formule que dans le chapitre Reaper.</p>
+<p>Avec quelques notes courtes, des départs au hasard et des vitesses variées, on obtient déjà une forme simple de <strong>synthèse granulaire</strong> :</p>
+<pre><code class="language-c">instr Grains
+    kmetro metro 20   // 20 grains par seconde
+    if kmetro == 1 then
+        schedulek(&quot;Lecteur&quot;, 0, random:k(0.05, 0.2), random:k(0.5, 2), 0.2)
+    endif
+endin
+</code></pre>
+<p>Pour aller plus loin dans cette direction, Csound propose des opcodes spécialisés : <code>partikkel</code>, <code>syncgrain</code>, <code>fog</code>…</p>
+<h2>4. Moduler le son : le rendre vivant</h2>
+<p>Un son dont tous les paramètres sont fixes sonne vite “électronique” au mauvais sens du terme. Les sons acoustiques bougent en permanence : un violon a du vibrato, un souffle varie, une note de piano change de timbre en s’éteignant. On peut reproduire cette vie avec des <strong>modulations</strong> : des signaux de contrôle (k) qui font varier un paramètre.</p>
+<h3>Le LFO : une oscillation lente</h3>
+<p>Un LFO (<em>Low Frequency Oscillator</em>) est un oscillateur trop lent pour être entendu comme un son (en dessous de 20 Hz), mais qui sert à faire osciller un paramètre :</p>
+<pre><code class="language-c">instr Vibrato
+    ifreq = p4
+    kvib  lfo 0.01, 5                    // oscille entre -0.01 et +0.01, 5 fois par seconde
+    asig  vco2 0.2, ifreq * (1 + kvib), 0
+    ...
+endin
+</code></pre>
+<p>La fréquence oscille de ±1% autour de <code>ifreq</code>, 5 fois par seconde : c’est un <strong>vibrato</strong>. Appliqué à l’amplitude, ce serait un <strong>trémolo</strong> ; appliqué à la coupure d’un filtre, un effet <em>wah</em> régulier.</p>
+<h3>Le hasard lissé : <code>randomi</code> et <code>randomh</code></h3>
+<p>Le LFO est régulier, donc prévisible. Pour une évolution plus organique, on utilise des valeurs aléatoires qui changent à une certaine vitesse :</p>
+<pre><code class="language-c">kcoupure randomi 300, 3000, 2    // nouvelle valeur entre 300 et 3000, 2 fois par seconde, reliées en douceur
+kcoupure randomh 300, 3000, 2    // pareil, mais par paliers (sans transition)
+</code></pre>
+<ul>
+<li><code>randomi</code> (<em>interpolated</em>) glisse d’une valeur à l’autre : idéal pour un filtre qui “respire”.</li>
+<li><code>randomh</code> (<em>hold</em>) saute d’une valeur à l’autre : idéal pour des changements nets, rythmiques.</li>
+</ul>
+<h3>Placer le son dans l’espace : <code>pan2</code></h3>
+<pre><code class="language-c">ipan   = random:i(0, 1)          // 0 = gauche, 0.5 = centre, 1 = droite
+aL, aR pan2 asig, ipan
+outs aL, aR
+</code></pre>
+<p>Avec une valeur <code>k</code> (un LFO par exemple), le son se déplace pendant la note.</p>
+<h3>Une précision importante : les enveloppes en <code>a</code></h3>
+<p>Au chapitre 3, on écrivait <code>kenv madsr ...</code>. Or, on l’a vu, une variable <strong>k</strong> n’est mise à jour que tous les 32 échantillons : sur une attaque très rapide, l’enveloppe progresse donc “en escalier”, ce qui peut produire un léger grésillement (<em>zipper noise</em>). La plupart des générateurs d’enveloppe peuvent aussi calculer en <strong>a</strong> : il suffit de changer le préfixe.</p>
+<pre><code class="language-c">aenv madsr 0.005, 0.1, 0.6, 0.3   // enveloppe calculée à chaque échantillon
+asig = asig * aenv
+</code></pre>
+<p>Règle simple : <strong>une enveloppe d’amplitude est plutôt en a</strong>. Pour tout le reste (filtre, vibrato, décisions), k suffit largement.</p>
+<h2>5. Créer ses propres opcodes</h2>
+<p>À force d’écrire des instruments, on recopie souvent les mêmes lignes (un oscillateur + un filtre, par exemple). Csound permet de les rassembler dans un <strong>opcode personnalisé</strong> (<em>UDO</em>, <em>User-Defined Opcode</em>). C’est l’équivalent des fonctions en Lua. D’ailleurs, le <code>SimpleSine</code> du chapitre 2 n’est rien d’autre qu’un UDO fourni sur la plateforme !</p>
+<pre><code class="language-c">opcode Timbre, a, kkk
+    kamp, kfreq, kbrillance xin     // les entrées
+
+    a1   vco2 kamp, kfreq, 0
+    a2   vco2 kamp, kfreq * 1.005, 0   // un 2e oscillateur, légèrement désaccordé
+    amix = (a1 + a2) * 0.5
+    aout moogladder amix, kfreq * kbrillance, 0.2
+
+    xout aout                        // la sortie
+endop
+</code></pre>
+<p>Et on l’utilise comme n’importe quel opcode :</p>
+<pre><code class="language-c">instr Voix
+    aenv madsr 0.01, 0.2, 0.5, 0.5
+    asig Timbre p5, p4, 3
+    asig = asig * aenv
+    outs asig, asig
+endin
+</code></pre>
+<h3>Pas à pas</h3>
+<p>La première ligne <code>opcode Timbre, a, kkk</code> se lit ainsi :</p>
+<ul>
+<li><code>Timbre</code> : le nom de notre opcode ;</li>
+<li><code>a</code> : ce qu’il <strong>renvoie</strong> (ici, un signal audio) ;</li>
+<li><code>kkk</code> : ce qu’il <strong>reçoit</strong> (ici, trois valeurs k). Chaque lettre correspond à une entrée.</li>
+</ul>
+<p>Ensuite :</p>
+<ul>
+<li><code>xin</code> récupère les entrées, dans l’ordre ;</li>
+<li><code>xout</code> renvoie le résultat ;</li>
+<li><code>endop</code> termine la définition.</li>
+</ul>
+<p>Les deux oscillateurs légèrement désaccordés (0.5% d’écart) produisent des <em>battements</em> : le son devient plus large, plus riche (un effet de <em>chorus</em>).</p>
+<p>À retenir : un UDO se définit <strong>avant</strong> les instruments qui l’utilisent. C’est une excellente manière de se constituer une bibliothèque de sons personnels, réutilisables d’un projet à l’autre.</p>
+<h2>6. Composer “à l’avance” dans Csound</h2>
+<p>Au chapitre 3, l’instrument de contrôle prenait ses décisions <strong>en temps réel</strong>, à chaque tour de boucle (avec des variables k). Mais Csound sait aussi composer “à l’avance”, comme on l’a fait avec les scripts Lua dans Reaper : au moment où une note démarre, elle peut calculer et programmer toute une série d’autres notes.</p>
+<h3>6.1 Les boucles à l’initialisation : <code>while</code></h3>
+<p>Comme la boucle <code>for</code> en Lua, la boucle <code>while</code> répète un bloc de code tant qu’une condition est vraie. Avec des variables <strong>i</strong>, toute la boucle s’exécute instantanément au début de la note :</p>
+<pre><code class="language-c">instr Arpege
+    iracine  = p4                      // note MIDI de départ
+    iNotes[] fillarray 0, 4, 7, 11, 14 // accord majeur 7/9
+    indx     = 0
+
+    while indx &lt; lenarray(iNotes) do
+        schedule &quot;Voix&quot;, indx * 0.12, 3, cpsmidinn(iracine + iNotes[indx]), 0.08
+        indx += 1
+    od
+endin
+</code></pre>
+<p>Une seule note <code>Arpege</code> programme 5 notes <code>Voix</code>, chacune décalée de 0.12 seconde : c’est un arpège. <code>schedule</code> (sans <code>k</code>) est la version <strong>i</strong> de <code>schedulek</code> : elle est exécutée une fois, au début de la note.</p>
+<ul>
+<li><code>lenarray</code> donne la taille d’un tableau ;</li>
+<li><code>indx += 1</code> est un raccourci pour <code>indx = indx + 1</code> ;</li>
+<li><code>od</code> ferme la boucle (c’est <code>do</code> à l’envers) ;</li>
+<li>attention : les tableaux Csound commencent à l’indice <strong>0</strong> (contrairement à Lua !).</li>
+</ul>
+<p>Essayez <code>indx * 0</code> (toutes les notes ensemble : un accord), ou <code>indx * random:i(0.05, 0.4)</code>.</p>
+<h3>6.2 Les instruments qui se relancent eux-mêmes</h3>
+<p>Une note peut programmer… une nouvelle note <strong>du même instrument</strong>. On obtient une chaîne d’événements qui s’auto-entretient. Voici la balle qui rebondit du chapitre Reaper, en Csound :</p>
+<pre><code class="language-c">instr Rebond
+    irestants = p4     // combien de rebonds il reste
+    iamp      = p5
+    iecart    = p6
+
+    schedule &quot;Voix&quot;, 0, 0.3, 880, iamp
+
+    if irestants &gt; 0 then
+        schedule p1, iecart, 0.1, irestants - 1, iamp * 0.85, iecart * 0.8
+    endif
+endin
+
+schedule &quot;Rebond&quot;, 0, 0.1, 12, 0.3, 0.5
+</code></pre>
+<p>À chaque rebond, la note joue un son, puis programme le rebond suivant avec un rebond de moins, une amplitude plus faible et un écart plus court. Quand <code>irestants</code> arrive à 0, la chaîne s’arrête. (<code>p1</code> désigne l’instrument lui-même.)</p>
+<p><strong>Attention</strong> : sans condition d’arrêt, la chaîne ne s’arrête jamais. C’est parfois exactement ce qu’on veut, par exemple pour une installation.</p>
+<h3>6.3 Une marche aléatoire</h3>
+<p>Un tirage totalement aléatoire dans une gamme produit des sauts dans tous les sens. Une <strong>marche aléatoire</strong> (<em>random walk</em>) est plus mélodique : à chaque étape, on avance d’un degré vers le haut, d’un degré vers le bas, ou on reste sur place. La mélodie “se promène” dans la gamme, par mouvements conjoints.</p>
+<pre><code class="language-c">giGamme[] fillarray 0, 2, 4, 7, 9, 12, 14, 16, 19, 21   // pentatonique sur 2 octaves
+
+instr Marche
+    idegre = p4                                 // position actuelle dans la gamme
+    schedule &quot;Voix&quot;, 0, 1.5, cpsmidinn(48 + giGamme[idegre]), 0.1
+
+    ipas     = int(random:i(0, 3)) - 1          // -1, 0 ou +1
+    isuivant = limit(idegre + ipas, 0, lenarray(giGamme) - 1)
+    schedule p1, random:i(0.25, 1), 0.1, isuivant
+endin
+
+schedule &quot;Marche&quot;, 0, 0.1, 5
+</code></pre>
+<ul>
+<li><code>int(random:i(0, 3))</code> donne 0, 1 ou 2 ; en retirant 1, on obtient -1, 0 ou +1.</li>
+<li><code>limit</code> empêche de sortir de la gamme (l’indice reste entre 0 et le dernier élément).</li>
+<li>La position actuelle est transmise d’une note à la suivante par le p-field <code>p4</code> : c’est la “mémoire” de la marche.</li>
+</ul>
+<p>C’est le principe de nombreux algorithmes de composition : une règle simple, appliquée étape par étape, dont chaque résultat dépend du précédent. Les chaînes de Markov, très utilisées en composition algorithmique (Xenakis, Hiller), en sont une généralisation.</p>
+<h2>7. Exercice : enrichir l’installation</h2>
+<p>Reprenez votre installation générative du chapitre 3 (ou l’exemple complet de ce chapitre, ci-dessous), et ajoutez-y au moins <strong>trois</strong> des éléments suivants :</p>
+<ul>
+<li>un <strong>bus de réverbération</strong> ;</li>
+<li>un <strong>opcode personnalisé</strong> pour votre timbre ;</li>
+<li>au moins une <strong>modulation</strong> (LFO, <code>randomi</code>…) sur un paramètre du son ;</li>
+<li>une <strong>spatialisation</strong> avec <code>pan2</code> ;</li>
+<li>un instrument qui lit un <strong>son enregistré</strong> (idéalement enregistré par vous) ;</li>
+<li>une <strong>marche aléatoire</strong>, ou un autre instrument qui se relance lui-même ;</li>
+<li>une enveloppe d’amplitude en <strong>a</strong>.</li>
+</ul>
+<p><strong>Exemple complet assemblant les éléments du chapitre :</strong></p>
+<pre><code class="language-c">&lt;CsoundSynthesizer&gt;
+&lt;CsOptions&gt;
+-odac
+&lt;/CsOptions&gt;
+
+&lt;CsInstruments&gt;
+
+sr     = 44100
+ksmps  = 32
+nchnls = 2
+0dbfs  = 1
+
+gaRevL    init 0
+gaRevR    init 0
+giGamme[] fillarray 0, 2, 4, 7, 9, 12, 14, 16, 19, 21
+
+// ===== Notre timbre personnel =====
+opcode Timbre, a, kkk
+    kamp, kfreq, kbrillance xin
+    a1   vco2 kamp, kfreq, 0
+    a2   vco2 kamp, kfreq * 1.005, 0
+    amix = (a1 + a2) * 0.5
+    aout moogladder amix, kfreq * kbrillance, 0.2
+    xout aout
+endop
+
+// ===== Instrument sonore =====
+instr Voix
+    ifreq = p4
+    iamp  = p5
+
+    aenv       madsr 0.02, 0.3, 0.5, 0.8
+    kvib       lfo 0.004, 5
+    kbrillance randomi 1.5, 4, 1
+    asig       Timbre iamp, ifreq * (1 + kvib), kbrillance
+    asig       = asig * aenv
+
+    aL, aR pan2 asig, random:i(0.2, 0.8)
+    outs aL, aR
+    gaRevL = gaRevL + aL * 0.4
+    gaRevR = gaRevR + aR * 0.4
+endin
+
+// ===== Marche aléatoire (mélodie) =====
+instr Marche
+    idegre = p4
+    schedule &quot;Voix&quot;, 0, random:i(1, 3), cpsmidinn(48 + giGamme[idegre]), ampdbfs(-12)
+
+    ipas     = int(random:i(0, 3)) - 1
+    isuivant = limit(idegre + ipas, 0, lenarray(giGamme) - 1)
+    schedule p1, random:i(0.3, 1.5), 0.1, isuivant
+endin
+
+// ===== Accords occasionnels (arpèges graves) =====
+instr Accords
+    ktime timeinsts
+    knext init 5
+    if ktime &gt;= knext then
+        schedulek(&quot;Arpege&quot;, 0, 0.1, 36 + giGamme[int(random:k(0, 5))])
+        knext = ktime + random:k(8, 15)
+    endif
+endin
+
+instr Arpege
+    iracine  = p4
+    iNotes[] fillarray 0, 7, 12, 16
+    indx     = 0
+    while indx &lt; lenarray(iNotes) do
+        schedule &quot;Voix&quot;, indx * 0.15, 6, cpsmidinn(iracine + iNotes[indx]), ampdbfs(-18)
+        indx += 1
+    od
+endin
+
+// ===== Réverbération : TOUJOURS en dernier =====
+instr Reverb
+    aL, aR reverbsc gaRevL, gaRevR, 0.88, 10000
+    outs aL, aR
+    clear gaRevL, gaRevR
+endin
+
+&lt;/CsInstruments&gt;
+
+&lt;CsScore&gt;
+f 0 z
+i &quot;Reverb&quot;  0 -1
+i &quot;Accords&quot; 0 -1
+i &quot;Marche&quot;  0 0.1 5
+&lt;/CsScore&gt;
+&lt;/CsoundSynthesizer&gt;
+</code></pre>
+<p>Remarquez que les deux logiques cohabitent : <code>Accords</code> décide <strong>en temps réel</strong> (variables k, comme au chapitre 3), tandis que <code>Marche</code> et <code>Arpege</code> composent <strong>à l’avance</strong> (variables i, <code>schedule</code>).</p>
+<h2>Mémo : les vérifications à faire quand ça ne marche pas</h2>
+<ol>
+<li>Chaque variable a-t-elle un préfixe (<code>i</code>, <code>k</code>, <code>a</code>, <code>S</code>, et <code>g</code> si elle est globale) ?</li>
+<li>Chaque variable est-elle créée <strong>avant</strong> d’être utilisée (faute de frappe ?) ?</li>
+<li>Les arguments de chaque opcode ont-ils la bonne vitesse ? (vérifier dans la documentation)</li>
+<li>Chaque <code>if</code> a-t-il son <code>endif</code>, chaque <code>while</code> son <code>od</code>, chaque <code>instr</code> son <code>endin</code>, chaque <code>opcode</code> son <code>endop</code> ?</li>
+<li>Les p-fields envoyés (<code>schedule</code>, score) sont-ils dans le même ordre que ceux lus dans l’instrument ?</li>
+<li>Le son sature-t-il (<code>samples out of range</code>) ? Baisser les amplitudes.</li>
+<li>Un bus global : est-il vidé avec <code>clear</code>, et l’instrument d’effet est-il bien le dernier ?</li>
+<li>Les tableaux Csound commencent à <strong>0</strong> (et ceux de Lua à 1).</li>
+</ol>
+<h2>Pour aller plus loin</h2>
+<ul>
+<li><a href="https://csound.com/manual/">Documentation Csound</a> : cherchez-y <code>diskin2</code>, <code>reverbsc</code>, <code>pan2</code>, <code>lfo</code>, <code>randomi</code>, <code>schedule</code>, <code>opcode</code>, <code>while</code>…</li>
+<li><a href="https://flossmanual.csound.com/">The Csound FLOSS Manual</a> : un manuel complet et gratuit, avec de nombreux exemples, du débutant à l’avancé. Les chapitres sur les UDO, les bus globaux et la granulaire complètent directement ce cours.</li>
+</ul>
+
+</body>
+</html>
